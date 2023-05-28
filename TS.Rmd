@@ -4,7 +4,7 @@ date: "2023-05-27"
 output: html_document
 ---
 
-```{r}
+```{r, warning=FALSE}
 # 导入需要的包
 packages = c("ggplot2", "dplyr", "tidyr", "data.table", 'corrplot', 'forecast', 'tseries','urca',
              'TSA', 'tibble', 'TTR', 'xts', 'assertthat','dygraphs','zoo','rugarch')
@@ -290,7 +290,7 @@ result_csi500_mon
 
 ```{r, warning=FALSE}
 # 宏观经济指标--------------------------------
-econdata = read.csv("EconData2012-2023.csv")[24:136,]
+econdata = read.csv("EconData2012-2023.csv")[25:136,]
 econdata[,"中国.CGPI.当月同比"] = econdata[,"中国.CGPI.当月同比"]-100
 
 # Convert columns to numeric data type and handle missing values
@@ -347,9 +347,13 @@ heatmap(correlation_matrix, main = "Correlation Heatmap")
 
 ```{r}
 # 执行Johansen协整检验
-filled_econdata_j = data.frame(diff(filled_df)[,c("中国.PPI.全部工业品.环比",
-                                                  "中国.M0.同比",	
-                                                  "中国.金融机构.各项贷款余额.同比")])
+filled_econdata_j = data.frame(filled_df[,c(
+                                            "中国.PPI.全部工业品.环比",
+                                            "中国.M0.同比",	
+                                            #"中国.M1.同比",	"中国.M2.同比"
+                                            "中国.金融机构.各项贷款余额.同比"
+                                            #"中国.社会消费品零售总额.当月同比"
+                                            )])
 
 # 执行Johansen协整检验
 johansen_results <- urca::ca.jo(filled_econdata_j, type = "trace", K = 2)  # K是协整关系的最大阶数
@@ -359,7 +363,12 @@ summary(johansen_results)
 ```
 
 ```{r}
-# 中证500回归结合宏观经济指标—————————————————————————————————————————————————
+# 协整变量
+x1 <- as.matrix(filled_econdata_j) %*% as.vector(johansen_results@V[,1]) 
+x2 <- as.matrix(filled_econdata_j) %*% as.vector(johansen_results@V[,2]) 
+acf(x1)
+acf(x2)
+```
 macro_data <- as.data.frame(cbind(econdata$指标名称[2:nrow(econdata)],
                                   filled_econdata_j[,c("中国.PPI.全部工业品.环比","中国.M0.同比","中国.金融机构.各项贷款余额.同比")],
                                   filled_df[2:nrow(econdata),
@@ -371,6 +380,25 @@ colnames(macro_data) = c("Date","PPI.diff","M0.diff","loan.diff","CPI","GovIncom
 df <- macro_data %>% mutate(return=as.vector(unname(ret_m500)))
 
 data_subset <- df[1:(nrow(df)-6),c("PPI.diff","M0.diff","loan.diff","CPI","GovIncome","return")]
+model <- lm(return ~ ., data = data_subset)
+
+# View the model summary
+summary(model)
+```{r}
+# 中证500回归结合宏观经济指标—————————————————————————————————————————————————
+macro_data <- as.data.frame(cbind(econdata$指标名称[2:nrow(econdata)],
+                                  as.data.frame(x1[2:nrow(econdata)]),
+                                  diff(filled_econdata_j[,c("中国.PPI.全部工业品.环比")]),
+                                  diff(filled_econdata_j[,c("中国.M0.同比")]),
+                                  diff(filled_econdata_j[,c("中国.金融机构.各项贷款余额.同比")]),
+                                  filled_df[2:nrow(econdata),c("中国.CPI.环比",
+                                              "中国.公共财政收入.当月值")]))
+macro_data[,1] = as.Date(macro_data[,1])
+colnames(macro_data) = c("Date","X1","PPI.diff","M0.diff","loan.diff","CPI","GovIncome")
+
+df <- macro_data %>% mutate(return=as.vector(unname(ret_m500))[2:nrow(econdata)])
+
+data_subset <- df[1:(nrow(df)-6),c("X1","PPI.diff","M0.diff","loan.diff","CPI","GovIncome","return")]
 model <- lm(return ~ ., data = data_subset)
 
 # View the model summary
