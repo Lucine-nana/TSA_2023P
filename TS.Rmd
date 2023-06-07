@@ -200,23 +200,36 @@ accuracy_naive=accuracy(forecast_naive,ytest)[2,]
 ```
 
 ```{r}
+Models=rep(0,max_lag)
+max_lag = 15
+for(p in 1:max_lag){
+  fit.arnew <- stats::arima(ytrain, order = c(p,0,0),method = "ML")
+  a=Box.test(fit.arnew$residuals,type = "Ljung-Box")
+  Models[p]<-a$p.value
+}
+PACF <- pacf(ytrain)$acf[1:max_lag]
+feasible_p <- which((abs(PACF * sqrt(length(ytrain))) > 1.96) == TRUE)
+print(Models)
+print(feasible_p)
+```
+
+```{r}
 # 观察ACF可以发现在10阶处有较大的相关性，构建AR(10)模型
 fit.ar10 <- stats::arima(ytrain, order = c(10,0,0),method = "ML")
 forecast_ar10 <- forecast(fit.ar10,h=b,level=c(95))
 fit.ar10
 checkresiduals(forecast_ar10) # 模型残差在5%水平下为白噪声
-accuracy_narima=accuracy(forecast_ar10,ytest)[2,]
+accuracy_ar10=accuracy(forecast_ar10,ytest)[2,]
 ```
 ```{r}
-fit.ar10$residuals
+sqrt(mean((fit.ar10$residuals)**2))
 ```
 
 ```{r}
-me <- mean((actual - predictions))
-rmse <- sqrt(mean((actual - predictions)^2))
-mae <- mean(abs(actual - predictions))
+forecast_ar10 <- forecast(fit.ar10,h=b)
+accuracy_ar10=accuracy(forecast_ar10,ytest)[2,]
 
-result_csi500=rbind(accuracy_ar[1:3],accuracy_arma[1:3],accuracy_mean[1:3],accuracy_naive[1:3],c(me,rmse,mae))
+result_csi500=rbind(accuracy_ar[1:3],accuracy_arma[1:3],accuracy_mean[1:3],accuracy_naive[1:3],accuracy_ar10[1:3])
 rownames(result_csi500) = c("AR(1)","ARMA(1,1)","mean","naive","AR(10)")
 result_csi500
 ```
